@@ -169,59 +169,79 @@ class Model:
         torch.manual_seed(seed)
         np.random.seed(seed)
         random.seed(seed)
-
+        # 构建损失函数和后处理
         criterion, postprocessors = build_criterion_and_postprocessors(args)
+        # 构建模型
         model = self.model
         model.to(device)
-
+        # 构建模型（不使用分布式训练）
         model_without_ddp = model
+        # 如果使用分布式训练
         if args.distributed:
             if args.sync_bn:
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
             model_without_ddp = model.module
-
+        # 计算模型参数数量
         n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print('number of params:', n_parameters)
+        # 获取模型参数字典
         param_dicts = get_param_dict(args, model_without_ddp)
-
+        # 只保留需要训练的参数
         param_dicts = [p for p in param_dicts if p['params'].requires_grad]
-
+        # 构建优化器
         optimizer = torch.optim.AdamW(param_dicts, lr=args.lr, 
                                     weight_decay=args.weight_decay)
         # Choose the learning rate scheduler based on the new argument
-
+        # 构建训练和验证数据集      
         dataset_train = build_dataset(image_set='train', args=args, resolution=args.resolution)
         dataset_val = build_dataset(image_set='val', args=args, resolution=args.resolution)
-
-        # for cosine annealing, calculate total training steps and warmup steps
+        # 计算训练步数和预热步数    
+        # 计算总批量大小
         total_batch_size_for_lr = args.batch_size * utils.get_world_size() * args.grad_accum_steps
+        # 计算每个epoch的训练步数
         num_training_steps_per_epoch_lr = (len(dataset_train) + total_batch_size_for_lr - 1) // total_batch_size_for_lr
+        # 计算总训练步数
         total_training_steps_lr = num_training_steps_per_epoch_lr * args.epochs
+        # 计算预热步数
         warmup_steps_lr = num_training_steps_per_epoch_lr * args.warmup_epochs
+        # 定义学习率衰减函数
         def lr_lambda(current_step: int):
+            # 如果当前步数小于预热步数,执行线性预热
             if current_step < warmup_steps_lr:
-                # Linear warmup
+                # 线性预热:学习率从0逐渐增加到初始学习率
+                # 通过当前步数除以总预热步数来计算预热系数
                 return float(current_step) / float(max(1, warmup_steps_lr))
             else:
-                # Cosine annealing from multiplier 1.0 down to lr_min_factor
+                # 预热后根据选择的调度器类型进行学习率衰减
                 if args.lr_scheduler == 'cosine':
+                    # 余弦退火调度
+                    # 计算训练进度:从预热结束到当前的进度比例
                     progress = float(current_step - warmup_steps_lr) / float(max(1, total_training_steps_lr - warmup_steps_lr))
+                    # 使用余弦函数将学习率从1.0平滑衰减到lr_min_factor
+                    # 公式: min_lr + (max_lr - min_lr) * 0.5 * (1 + cos(π * progress))
                     return args.lr_min_factor + (1 - args.lr_min_factor) * 0.5 * (1 + math.cos(math.pi * progress))
                 elif args.lr_scheduler == 'step':
+                    # 阶梯式学习率衰减
+                    # 在lr_drop轮次之前保持初始学习率
                     if current_step < args.lr_drop * num_training_steps_per_epoch_lr:
                         return 1.0
+                    # lr_drop轮次后学习率降为原来的0.1
                     else:
                         return 0.1
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-
-        if args.distributed:
+        # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+        lr_scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer, start_factor=1.0, total_iters=args.epochs * num_training_steps_per_epoch_lr,
+            end_factor=0.1
+        )
+        # 构建训练和验证数据集的采样器
+        if args.distributed:    # 分布式训练
             sampler_train = DistributedSampler(dataset_train)
             sampler_val = DistributedSampler(dataset_val, shuffle=False)
         else:
             sampler_train = torch.utils.data.RandomSampler(dataset_train)
             sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-
+        # 计算有效批量大小
         effective_batch_size = args.batch_size * args.grad_accum_steps
         min_batches = kwargs.get('min_batches', 5)
         if len(dataset_train) < effective_batch_size * min_batches:

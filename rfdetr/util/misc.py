@@ -289,6 +289,7 @@ def get_sha():
 def collate_fn(batch):
     batch = list(zip(*batch))
     batch[0] = nested_tensor_from_tensor_list(batch[0])
+
     return tuple(batch)
 
 
@@ -337,6 +338,14 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
         # min_size = tuple(min(s) for s in zip(*[img.shape for img in tensor_list]))
         batch_shape = [len(tensor_list)] + max_size
         b, c, h, w = batch_shape
+        
+         
+        # Round height and width to be divisible by 56
+        h = round(h / 56) * 56
+        w = round(w / 56) * 56
+        batch_shape[2] = h
+        batch_shape[3] = w
+        
         dtype = tensor_list[0].dtype
         device = tensor_list[0].device
         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)

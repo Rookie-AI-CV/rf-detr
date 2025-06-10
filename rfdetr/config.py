@@ -77,7 +77,7 @@ class TrainConfig(BaseModel):
     multi_scale: bool = True
     expanded_scales: bool = True
     use_ema: bool = True
-    num_workers: int = 2
+    num_workers: int = 8
     weight_decay: float = 1e-4
     early_stopping: bool = False
     early_stopping_patience: int = 10

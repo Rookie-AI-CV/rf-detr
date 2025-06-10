@@ -212,6 +212,13 @@ class RandomHorizontalFlip(object):
             return hflip(img, target)
         return img, target
 
+class RandomVerticalFlip(object):
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, img, target):
+        if random.random() < self.p:
+            return vflip(img, target)
 
 class RandomResize(object):
     def __init__(self, sizes, max_size=None):
@@ -225,32 +232,57 @@ class RandomResize(object):
 
 
 class SquareResize(object):
+    """
+    正方形缩放变换
+    将图像和边界框缩放到指定的正方形尺寸
+    Args:
+        sizes (list or tuple): 可选的缩放尺寸列表
+    """
     def __init__(self, sizes):
         assert isinstance(sizes, (list, tuple))
         self.sizes = sizes
 
     def __call__(self, img, target=None):
+        """
+        执行正方形缩放变换
+        Args:
+            img: 输入图像
+            target: 包含边界框等信息的字典
+        Returns:
+            缩放后的图像和目标信息
+        """
+        # 随机选择一个目标尺寸
         size = random.choice(self.sizes)
-        rescaled_img=F.resize(img, (size, size))
+        # 将图像缩放到正方形
+        rescaled_img = F.resize(img, (size, size))
         w, h = rescaled_img.size
+        
+        # 如果没有目标信息,直接返回缩放后的图像
         if target is None:
             return rescaled_img, None
+            
+        # 计算缩放比例
         ratios = tuple(
             float(s) / float(s_orig) for s, s_orig in zip(rescaled_img.size, img.size))
         ratio_width, ratio_height = ratios
 
+        # 复制目标信息以避免修改原始数据
         target = target.copy()
+        
+        # 如果有边界框,按比例缩放边界框坐标
         if "boxes" in target:
             boxes = target["boxes"]
             scaled_boxes = boxes * torch.as_tensor(
                 [ratio_width, ratio_height, ratio_width, ratio_height])
             target["boxes"] = scaled_boxes
 
+        # 如果有面积信息,按比例缩放面积
         if "area" in target:
             area = target["area"]
             scaled_area = area * (ratio_width * ratio_height)
             target["area"] = scaled_area
 
+        # 更新目标尺寸信息
         target["size"] = torch.tensor([h, w])
 
         return rescaled_img, target

@@ -179,10 +179,13 @@ class LWDETR(nn.Module):
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
-
+        # 两阶段训练
         if self.two_stage:
+            # 获取组数
             group_detr = self.group_detr if self.training else 1
+            # 将编码器输出分成组
             hs_enc_list = hs_enc.chunk(group_detr, dim=1)
+            # 对每个组进行分类
             cls_enc = []
             for g_idx in range(group_detr):
                 cls_enc_gidx = self.transformer.enc_out_class_embed[g_idx](hs_enc_list[g_idx])

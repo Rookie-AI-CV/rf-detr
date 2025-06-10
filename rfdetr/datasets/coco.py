@@ -25,6 +25,7 @@ import torch.utils.data
 import torchvision
 
 import rfdetr.datasets.transforms as T
+from rfdetr.datasets import augment
 
 
 def compute_multi_scale_scales(resolution, expanded_scales=False):
@@ -111,7 +112,7 @@ def make_coco_transforms(image_set, resolution, multi_scale=False, expanded_scal
 
     normalize = T.Compose([
         T.ToTensor(),
-        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]) 
     ])
 
     scales = [resolution]
@@ -122,26 +123,53 @@ def make_coco_transforms(image_set, resolution, multi_scale=False, expanded_scal
 
     if image_set == 'train':
         return T.Compose([
-            T.RandomHorizontalFlip(),
-            T.RandomSelect(
-                T.RandomResize(scales, max_size=1333),
-                T.Compose([
-                    T.RandomResize([400, 500, 600]),
-                    T.RandomSizeCrop(384, 600),
-                    T.RandomResize(scales, max_size=1333),
-                ])
-            ),
+            # T.RandomHorizontalFlip(),
+            # T.RandomSelect(
+            #     T.RandomResize(scales, max_size=1333),
+            #     T.Compose([
+            #         T.RandomResize([400, 500, 600]),
+            #         T.RandomSizeCrop(384, 600),
+            #         T.RandomResize(scales, max_size=1333),
+            #     ])
+            # ),
+            augment.ToNumpy(),  # 将图像和目标框转换为numpy格式
+            augment.RandomHorizontalFlip(), # 随机水平翻转
+            augment.RandomVerticalFlip(),   # 随机垂直翻转
+            augment.RandomGrayScale(), # 随机灰度化
+            augment.RandomShuffleChannel(), # 随机打乱通道
+            augment.RandomRotate90(p=0.1), # 随机旋转90度
+            augment.RandomRotate(p=0.1), # 随机旋转
+            augment.RandomAffine(p=0.1),    # 随机仿射变换
+            augment.RandomPerspective(p=0.1), # 随机透视变换
+            augment.RandomNoise(p=0.1), # 随机噪声
+            augment.RandomBrightness(p=0.1), # 随机亮度
+            augment.RandomCrop(p=0.1), # 随机裁剪
+            augment.RandomResize(p=0.1), # 随机缩放
+            augment.Resize(max_size=resolution), # 缩放到指定大小
+            augment.FilterSmallBox(), # 过滤小目标框
+            augment.Format(),
+            augment.BGR2RGB(),
             normalize,
         ])
 
     if image_set == 'val':
         return T.Compose([
-            T.RandomResize([resolution], max_size=1333),
+            # T.RandomResize([resolution], max_size=1333),
+            augment.ToNumpy(),  # 将图像和目标框转换为numpy格式
+            augment.Resize(max_size=resolution), # 缩放到指定大小
+            augment.FilterSmallBox(), # 过滤小目标框
+            augment.Format(), # 格式化
+            augment.BGR2RGB(),
             normalize,
         ])
     if image_set == 'val_speed':
         return T.Compose([
-            T.SquareResize([resolution]),
+            # T.SquareResize([resolution]),
+            augment.ToNumpy(),
+            augment.Resize(max_size=resolution),
+            augment.FilterSmallBox(),
+            augment.Format(),
+            augment.BGR2RGB(),
             normalize,
         ])
 
@@ -166,26 +194,54 @@ def make_coco_transforms_square_div_64(image_set, resolution, multi_scale=False,
 
     if image_set == 'train':
         return T.Compose([
-            T.RandomHorizontalFlip(),
-            T.RandomSelect(
-                T.SquareResize(scales),
-                T.Compose([
-                    T.RandomResize([400, 500, 600]),
-                    T.RandomSizeCrop(384, 600),
-                    T.SquareResize(scales),
-                ]),
-            ),
+            # T.RandomHorizontalFlip(),
+            # T.RandomSelect(
+            #     T.SquareResize(scales),
+            #     T.Compose([
+            #         T.RandomResize([400, 500, 600]),
+            #         T.RandomSizeCrop(384, 600),
+            #         T.SquareResize(scales),
+            #     ]),
+            # ),
+            # T.SquareResize(scales),
+            augment.ToNumpy(),  # 确保图像为OpenCV格式
+            augment.RandomHorizontalFlip(), # 随机水平翻转
+            augment.RandomVerticalFlip(), # 随机垂直翻转
+            augment.RandomGrayScale(), # 随机灰度化
+            augment.RandomShuffleChannel(), # 随机打乱通道
+            augment.RandomRotate90(p=0.1), # 随机旋转90度
+            augment.RandomRotate(p=0.1), # 随机旋转
+            augment.RandomAffine(p=0.1), # 随机仿射变换
+            augment.RandomPerspective(p=0.1), # 随机透视变换
+            augment.RandomNoise(p=0.1), # 随机噪声
+            augment.RandomBrightness(p=0.1), # 随机亮度
+            augment.RandomCrop(p=0.1), # 随机裁剪
+            augment.RandomResize(p=0.1), # 随机缩放
+            augment.Resize(max_size=resolution), # 缩放到指定大小
+            augment.FilterSmallBox(), # 过滤小目标框
+            augment.Format(), # 格式化
+            augment.BGR2RGB(),
             normalize,
         ])
 
     if image_set == 'val':
         return T.Compose([
-            T.SquareResize([resolution]),
+            # T.SquareResize([resolution]),
+            augment.ToNumpy(),
+            augment.Resize(max_size=resolution),
+            augment.FilterSmallBox(),
+            augment.Format(),
+            augment.BGR2RGB(),
             normalize,
         ])
     if image_set == 'val_speed':
         return T.Compose([
-            T.SquareResize([resolution]),
+            # T.SquareResize([resolution]),
+            augment.ToNumpy(),
+            augment.Resize(max_size=resolution),
+            augment.FilterSmallBox(),
+            augment.Format(),
+            augment.BGR2RGB(),
             normalize,
         ])
 
@@ -196,9 +252,9 @@ def build(image_set, args, resolution):
     assert root.exists(), f'provided COCO path {root} does not exist'
     mode = 'instances'
     PATHS = {
-        "train": (root / "train2017", root / "annotations" / f'{mode}_train2017.json'),
-        "val": (root /  "val2017", root / "annotations" / f'{mode}_val2017.json'),
-        "test": (root / "test2017", root / "annotations" / f'image_info_test-dev2017.json'),
+        "train": (root / "train", root / "train" / "_annotations.coco.json"),
+        "val": (root /  "valid", root / "valid" / "_annotations.coco.json"),
+        "test": (root / "test", root / "test" / "_annotations.coco.json"),
     }
     
     img_folder, ann_file = PATHS[image_set.split("_")[0]]
